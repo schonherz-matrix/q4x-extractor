@@ -28,15 +28,27 @@ bool extract (const char* filename)
     QByteArray MAGIC = f.read(4);
     if (QString("Q4X1") != MAGIC) return false;
 
+    // Ezt is a metaadatok között kiírni buzis...
+    f.read(2); //w a sch szelessege pixelben
+    f.read(2); //h a sch magassaga pixelben
+
     qStdOut() << "\tExtacting qp4 from qpx\n";
     if (! extr_int(f, i.baseName()+".qp4"))
-            return false;
+    {}
 
-    if(f.bytesAvailable() > 1) {
+    qStdOut() << "\tExtacting qpr from qpx\n";
+    if (! extr_int(f, i.baseName()+".qpr"))
+    {}
+
+    if(f.bytesAvailable() >=4) {
         qStdOut() << "Exctracting mp3 from qpx\n";
+
+        quint32 size;
+        f.read(reinterpret_cast<char*>(&size), 4);
+        size = qFromBigEndian<quint32>(size);
         QFile audio(i.baseName()+".mp3");
         audio.open(QIODevice::WriteOnly);
-        audio.write(f.readAll());
+        audio.write(f.read(size));
     }
     return true;
 }
@@ -46,7 +58,10 @@ bool extr_int(QFile &input, const QString &outputfile)
     quint32 size;
     input.read(reinterpret_cast<char*>(&size), 4);
     size = qFromBigEndian<quint32>(size);
+    quint32 expsize = size*9; // kbkb...
+    expsize = qToBigEndian<quint32>(expsize);
     QByteArray compressed = input.read(size);
+    compressed.prepend(reinterpret_cast<const char*>(&expsize), 4);
     QByteArray uncompressed = qUncompress(compressed);
     if (uncompressed.length() == 0) return false;
     QFile output(outputfile);
