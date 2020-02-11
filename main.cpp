@@ -1,88 +1,118 @@
 #include <QCoreApplication>
-#include <QByteArray>
+
+#include <QCommandLineOption>
+#include <QCommandLineParser>
+#include <QDataStream>
+#include <QDebug>
+#include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
-#include <QtEndian>
-#include <QRegExp>
-#include <QTextStream>
-#include <cstdio>
-#include <limits>
 
-QTextStream& qStdOut()
-{
-    static QTextStream ts( stdout );
-    return ts;
+static bool extractFile(QDataStream& in, QString outputFile) {
+  quint32 size;
+  in >> size;
+
+  QByteArray buffer;
+  // header + size
+  // https://doc.qt.io/qt-5/qbytearray.html#qUncompress
+  buffer.reserve(4 + size);
+  QDataStream bufferStream(&buffer, QIODevice::WriteOnly);
+
+  // Expected size as Big-endian
+  bufferStream << size * 9;
+  buffer.append(in.device()->read(size));
+
+  QFile output(outputFile);
+  if (!output.open(QFile::WriteOnly)) return false;
+
+  auto uncompressed = qUncompress(buffer);
+  if (uncompressed.size() == 0) return false;
+  output.write(uncompressed);
+
+  return true;
 }
 
-bool extr_int (QFile&f, const QString& outputfile);
+static bool extract(QString filename) {
+  QFile file(filename);
+  QFileInfo fileInfo(filename);
+  if (!file.open(QFile::ReadOnly)) return false;
 
-bool extract (const char* filename)
-{
-    QFile f(filename);
-    QFileInfo i (filename);
-    if (!f.open (QIODevice::ReadOnly))
-    {
-        qStdOut() << "\tUnable to open file\n";
-        return false;
-    }
-    QByteArray MAGIC = f.read(4);
-    if (QString("Q4X1") != MAGIC) return false;
+  QDir dir;
+  dir.mkdir(fileInfo.baseName());
+  dir.setCurrent(fileInfo.baseName());
 
-    // Ezt is a metaadatok között kiírni buzis...
-    f.read(2); //w a sch szelessege pixelben
-    f.read(2); //h a sch magassaga pixelben
+  QDataStream in(&file);
+  auto magic = file.read(4);
+  if ("Q4X1" != magic && "Q4X2" != magic) return false;
 
-    qStdOut() << "\tExtacting qp4 from qpx\n";
-    if (! extr_int(f, i.baseName()+".qp4"))
-    {}
+  // Skip width, height values
+  file.seek(file.pos() + 4);
 
-    qStdOut() << "\tExtacting qpr from qpx\n";
-    if (! extr_int(f, i.baseName()+".qpr"))
-    {}
+  qInfo() << "\tExtracting qp4";
+  if (!extractFile(in, fileInfo.baseName() + ".qp4")) return false;
+  qInfo() << "\tExtracting qpr";
+  if (!extractFile(in, fileInfo.baseName() + ".qpr")) return false;
 
-    if(f.bytesAvailable() >=4) {
-        qStdOut() << "Exctracting mp3 from qpx\n";
+  quint32 audioSize;
+  in >> audioSize;
+  if (audioSize > 0) {
+    auto audioMagic = file.peek(4);
 
-        quint32 size;
-        f.read(reinterpret_cast<char*>(&size), 4);
-        size = qFromBigEndian<quint32>(size);
-        QFile audio(i.baseName()+".mp3");
-        audio.open(QIODevice::WriteOnly);
-        audio.write(f.read(size));
-    }
-    return true;
+    // Correct audio type is checked when exporting animation
+    // No need to check complicated mp3 header
+    QString extension = ("OggS" == audioMagic) ? "ogg" : "mp3";
+
+    qInfo().noquote() << "\tExtracting" << extension;
+    QFile output(fileInfo.baseName() + "." + extension);
+    if (!output.open(QFile::WriteOnly)) return false;
+    output.write(file.read(audioSize));
+  }
+
+  return true;
 }
 
-bool extr_int(QFile &input, const QString &outputfile)
-{
-    quint32 size;
-    input.read(reinterpret_cast<char*>(&size), 4);
-    size = qFromBigEndian<quint32>(size);
-    quint32 expsize = size*9; // kbkb...
-    expsize = qToBigEndian<quint32>(expsize);
-    QByteArray compressed = input.read(size);
-    compressed.prepend(reinterpret_cast<const char*>(&expsize), 4);
-    QByteArray uncompressed = qUncompress(compressed);
-    if (uncompressed.length() == 0) return false;
-    QFile output(outputfile);
-    output.open(QIODevice::WriteOnly);
-    qint64 writed = output.write(uncompressed);
-    return writed == uncompressed.length();
-}
+int main(int argc, char* argv[]) {
+  QCoreApplication a(argc, argv);
+  QCoreApplication::setApplicationName("q4x-extractor");
+  QCoreApplication::setApplicationVersion("1.0");
 
-int main(int argc, char *argv[])
-{
-    //QCoreApplication a(argc, argv);
+  QCommandLineParser parser;
+  parser.setApplicationDescription(
+      "Extracts qp4, qpr, mp3/ogg(if exists) files from q4x to a separate "
+      "folder in the current working directory");
+  parser.addHelpOption();
+  parser.addVersionOption();
 
-    for (int i = 1; i < argc; ++i){
-        const char* filename = argv[i];
-        qStdOut() << "Extracting file " << filename << '\n';
-        bool success = extract (filename);
-        if (!success)
-            qStdOut() << "Extracting failed\n";
+  parser.addPositionalArgument(
+      "path", QCoreApplication::translate(
+                  "path", "List of directories or q4x files to extract from"));
+
+  parser.process(a);
+
+  auto currentDir = QDir::currentPath();
+  for (auto path : parser.positionalArguments()) {
+    QFileInfo info(path);
+
+    if (info.isDir()) {
+      qInfo().noquote() << "Extracting files from directory" << path;
+      QDirIterator it(path, QStringList("*.q4x"),
+                      QDir::Files | QDir::NoDotAndDotDot,
+                      QDirIterator::Subdirectories);
+      while (it.hasNext()) {
+        auto file = it.next();
+        qInfo().noquote() << "Extracting file" << file;
+        if (!extract(file)) qInfo() << "\tExtracting failed";
+
+        QDir::setCurrent(currentDir);
+      }
+    } else {
+      qInfo().noquote() << "Extracting file" << path;
+      if (!extract(path)) qInfo() << "\tExtracting failed";
+
+      QDir::setCurrent(currentDir);
     }
+  }
 
-    return 0;
-    //return a.exec();
-
+  return 0;
 }
