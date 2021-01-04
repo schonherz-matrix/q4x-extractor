@@ -2,17 +2,6 @@
 
 Extracts qp4, qpr, mp3/ogg(if exists) files from q4x
 
-## Prerequisites
-
-Qt **5.12**(LTS) or above is recommended
-
-**C++ 17** compatible compiler
-
-Build tools for Qt(platform dependent):
-
-- **MSVC**(Desktop development with C++)/MinGW on **Windows**
-- **build-essential** on **Unix/Linux**
-
 ## Usage
 
 q4x-extractor path
