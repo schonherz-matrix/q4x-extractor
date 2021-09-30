@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.16)
 
 project(
-  q4x-extractor
-  DESCRIPTION "Extracts qp4, qpr, mp3/ogg(if exists) files from q4x"
-  HOMEPAGE_URL "kszk.bme.hu"
-  LANGUAGES CXX)
+        q4x-extractor
+        DESCRIPTION "Extracts qp4, qpr, mp3/ogg(if exists) files from q4x"
+        HOMEPAGE_URL "kszk.bme.hu"
+        LANGUAGES CXX)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
@@ -16,18 +16,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(
-  Qt5
-  COMPONENTS Core
-  REQUIRED)
+        Qt6
+        COMPONENTS Core
+        REQUIRED)
 
 add_executable(${PROJECT_NAME} src/main.cpp)
-target_link_libraries(${PROJECT_NAME} PRIVATE Qt5::Core)
-
-set(CPACK_PACKAGE_VENDOR ${PROJECT_HOMEPAGE_URL})
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY ${PROJECT_DESCRIPTION})
-set(CPACK_PACKAGE_VERSION_MAJOR ${PROJECT_VERSION_MAJOR})
-set(CPACK_PACKAGE_VERSION_MINOR ${PROJECT_VERSION_MINOR})
-set(CPACK_PACKAGE_VERSION_PATCH ${PROJECT_VERSION_PATCH})
-set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
-set(CPACK_RESOURCE_FILE_README "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
-include(CPack)
+target_link_libraries(${PROJECT_NAME} PRIVATE Qt6::Core)

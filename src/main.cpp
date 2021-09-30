@@ -1,7 +1,6 @@
-#include <QCoreApplication>
-
 #include <QCommandLineOption>
 #include <QCommandLineParser>
+#include <QCoreApplication>
 #include <QDataStream>
 #include <QDebug>
 #include <QDir>
